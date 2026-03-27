@@ -1,0 +1,57 @@
+import streamlit as st
+import yfinance as yf
+import pandas as pd
+
+# --- 1. 設定 ---
+st.set_page_config(page_title="我的私人投資分析師", layout="wide")
+st.title("📈 均線策略實戰模型")
+
+# --- 2. 側邊欄控制面板 ---
+st.sidebar.header("⚙️ 參數設定")
+ticker = st.sidebar.text_input("1. 股票代號 (如: VOO, NVDA, 0700.HK)", "VOO").upper()
+
+st.sidebar.subheader("2. 均線天數 (直接輸入數字)")
+# 將 slider 改為 number_input，方便財務精確計算
+short_p = st.sidebar.number_input("短期快線天數", min_value=1, max_value=100, value=20)
+long_p = st.sidebar.number_input("長期慢線天數", min_value=10, max_value=500, value=60)
+
+start_date = st.sidebar.date_input("3. 開始日期", pd.to_datetime("2024-01-01"))
+
+# --- 💡 重點：加入實體按鈕 ---
+run_button = st.sidebar.button("🚀 開始執行分析")
+
+# --- 3. 邏輯執行區 ---
+if run_button: # 只有按下按鈕後才執行下方代碼
+    with st.spinner('正在從 Yahoo Finance 抓取數據...'):
+        try:
+            df = yf.download(ticker, start=start_date)
+            
+            if df.empty:
+                st.error("找不到該股票數據，請檢查代號是否正確。")
+            else:
+                # 計算均線
+                df['Short_MA'] = df['Close'].rolling(window=short_p).mean()
+                df['Long_MA'] = df['Close'].rolling(window=long_p).mean()
+
+                # --- 4. 顯示結果 ---
+                current_price = df['Close'].iloc[-1]
+                last_short = df['Short_MA'].iloc[-1]
+                last_long = df['Long_MA'].iloc[-1]
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric(f"{ticker} 當前股價", f"${current_price:.2f}")
+                with col2:
+                    if last_short > last_long:
+                        st.success(f"✅ 趨勢：多頭 (快線 > 慢線)")
+                    else:
+                        st.error(f"⚠️ 趨勢：空頭 (快線 < 慢線)")
+
+                # --- 5. 圖表 ---
+                st.subheader(f"{ticker} 走勢與 {short_p}/{long_p} 均線圖")
+                st.line_chart(df[['Close', 'Short_MA', 'Long_MA']])
+        
+        except Exception as e:
+            st.error(f"發生錯誤: {e}")
+else:
+    st.info("👈 請在左側輸入代號並點擊「開始執行分析」按鈕。")
